@@ -1,0 +1,28 @@
+# ---- 构建产物 ----
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.a
+*.so
+*.exe
+dahengshibie
+
+# ---- 日志文件 ----
+*.log
+logs/
+
+# ---- 系统 / 编辑器缓存 ----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.cache/
+__pycache__/
+*.py[cod]

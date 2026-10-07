@@ -1,0 +1,37 @@
+#####----- 传统装甲识别配置 -----#####
+# 敌方颜色：red 或 blue（仅分割该颜色）。
+# red  = 分割红色装甲（蓝方视角）；blue = 分割蓝色装甲（红方视角）。默认 red。
+enemy_color: "red"
+
+#####----- 大恒相机参数 -----#####
+# 相机序列号；留空 "" 则自动枚举选择第一台相机
+serial: ""
+
+#####----- HSV 颜色阈值 -----#####
+# 红色在色相环上跨越 0°/180° 两端，用两段区间取并集
+red_hue_low: [0, 160]
+red_hue_high: [20, 180]
+# 蓝色只用一段区间
+blue_hue_low: 100
+blue_hue_high: 124
+saturation_low: 100
+saturation_high: 255
+value_low: 80
+value_high: 255
+
+#####----- 形态学 -----#####
+morph_kernel_size: 3
+
+#####----- 灯条筛选 -----#####
+max_angle_error: 45      # degree，灯条偏离竖直方向的最大角度
+min_lightbar_ratio: 1.5  # 灯条最小长宽比
+max_lightbar_ratio: 20   # 灯条最大长宽比
+min_lightbar_length: 8   # 灯条最小长度（像素）
+
+#####----- 装甲配对判断 -----#####
+min_armor_ratio: 1       # 装甲板最小宽高比
+max_armor_ratio: 5       # 装甲板最大宽高比
+max_side_ratio: 1.5      # 左右灯条最大长度比
+max_rectangular_error: 25  # degree，灯条与连线垂直误差
+
+debug: true
