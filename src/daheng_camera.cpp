@@ -158,13 +158,18 @@ bool DahengCamera::StartStream()
 
   // SDK 内部取流缓存 5 个，并分配 Bayer -> RGB 转换输出缓冲
   GXSetAcqusitionBufferNumber(device_, 5);
-  rgb_buffer_ = static_cast<unsigned char *>(malloc(sizeof(unsigned char) * width_ * height_ * 3));
+  // [优化] 分配两块转换缓冲，交替使用
+  rgb_buffer_[0] = static_cast<unsigned char *>(malloc(sizeof(unsigned char) * width_ * height_ * 3));
+  rgb_buffer_[1] = static_cast<unsigned char *>(malloc(sizeof(unsigned char) * width_ * height_ * 3));
+  rgb_buffer_index_ = 0;
 
   GX_STATUS status = GXStreamOn(device_);
   if (status != GX_STATUS_SUCCESS) {
     RM_LOG_ERROR("GXStreamOn: {}", GetErrorString(status));
-    free(rgb_buffer_);
-    rgb_buffer_ = nullptr;
+    free(rgb_buffer_[0]);
+    free(rgb_buffer_[1]);
+    rgb_buffer_[0] = nullptr;
+    rgb_buffer_[1] = nullptr;
     return false;
   }
   streaming_ = true;
@@ -190,8 +195,10 @@ bool DahengCamera::Grab(cv::Mat & image, int timeout_ms)
   }
 
   // Bayer RG8 -> BGR24（邻域插值，不翻转，输出 OpenCV BGR 通道序）
+  // [优化] 写入当前缓冲，双缓冲交替使用
+  unsigned char * rgb_out = rgb_buffer_[rgb_buffer_index_];
   VxInt32 dx_status = DxRaw8toRGB24Ex(
-    frame_buffer->pImgBuf, rgb_buffer_, frame_buffer->nWidth, frame_buffer->nHeight,
+    frame_buffer->pImgBuf, rgb_out, frame_buffer->nWidth, frame_buffer->nHeight,
     RAW2RGB_NEIGHBOUR, DX_PIXEL_COLOR_FILTER(color_filter_), false, DX_ORDER_BGR);
   if (dx_status != DX_OK) {
     RM_LOG_ERROR("DxRaw8toRGB24Ex 失败: {:#x}", static_cast<unsigned int>(dx_status));
@@ -199,8 +206,10 @@ bool DahengCamera::Grab(cv::Mat & image, int timeout_ms)
     return false;
   }
 
-  // rgb_buffer_ 每帧复用，必须 clone 拷贝一份再返回
-  image = cv::Mat(frame_buffer->nHeight, frame_buffer->nWidth, CV_8UC3, rgb_buffer_).clone();
+  // [优化] 直接共享转换缓冲（不 clone），下次取帧改用另一块缓冲，
+  //        上一帧在下次取帧前仍有效（主循环为单消费者，逐帧使用）
+  image = cv::Mat(frame_buffer->nHeight, frame_buffer->nWidth, CV_8UC3, rgb_out);
+  rgb_buffer_index_ ^= 1;  // 切换缓冲
 
   // QB = EnQueue，用完还回队列，漏还会把队列掏空导致帧率掉 0
   GXQBuf(device_, frame_buffer);
@@ -213,9 +222,12 @@ void DahengCamera::StopStream()
     GXStreamOff(device_);
     streaming_ = false;
   }
-  if (rgb_buffer_) {
-    free(rgb_buffer_);
-    rgb_buffer_ = nullptr;
+  // [优化] 释放两块转换缓冲
+  for (int i = 0; i < 2; i++) {
+    if (rgb_buffer_[i]) {
+      free(rgb_buffer_[i]);
+      rgb_buffer_[i] = nullptr;
+    }
   }
 }
 
@@ -297,6 +309,32 @@ bool DahengCamera::AddGamma(double delta)
     return false;
   }
   RM_LOG_INFO("伽马 -> {:.2f}", value);
+  return true;
+}
+
+// [优化] 绝对设置固定曝光（短曝光解除相机出帧率上限，需按现场光照标定）
+bool DahengCamera::SetExposure(double us)
+{
+  double value = us < 1.0 ? 1.0 : (us > 10000.0 ? 10000.0 : us);
+  GX_STATUS status = GXSetFloatValue(device_, "ExposureTime", value);
+  if (status != GX_STATUS_SUCCESS) {
+    RM_LOG_ERROR("Set ExposureTime: {}", GetErrorString(status));
+    return false;
+  }
+  RM_LOG_INFO("曝光时间 -> {:.2f} us", value);
+  return true;
+}
+
+// [优化] 绝对设置固定增益
+bool DahengCamera::SetGain(double db)
+{
+  double value = db < 0.0 ? 0.0 : (db > 32.0 ? 32.0 : db);
+  GX_STATUS status = GXSetFloatValue(device_, "Gain", value);
+  if (status != GX_STATUS_SUCCESS) {
+    RM_LOG_ERROR("Set Gain: {}", GetErrorString(status));
+    return false;
+  }
+  RM_LOG_INFO("增益 -> {:.2f} dB", value);
   return true;
 }
 

@@ -53,6 +53,9 @@ public:
   bool AddExposureTime(double delta_us);  // 曝光，单位 us
   bool AddGain(double delta_db);          // 增益，单位 dB
   bool AddGamma(double delta);            // 伽马
+  // [优化] 绝对设置固定曝光/增益：灯条高亮，短曝光即可，长曝光会锁死相机帧率
+  bool SetExposure(double us);  // 固定曝光，单位 us
+  bool SetGain(double db);      // 固定增益，单位 dB
 
 private:
   GX_DEV_HANDLE device_ = nullptr;        // 设备句柄
@@ -60,7 +63,9 @@ private:
   int width_ = 0;
   int height_ = 0;
   int64_t color_filter_ = GX_COLOR_FILTER_NONE;  // Bayer 滤镜排列（RG/GB/GR/BG）
-  unsigned char * rgb_buffer_ = nullptr;          // Bayer 转换输出缓冲
+  // [优化] 双缓冲：交替使用两块 RGB 输出缓冲，返回帧在下次取帧前有效，避免每帧 clone
+  unsigned char * rgb_buffer_[2] = {nullptr, nullptr};
+  int rgb_buffer_index_ = 0;                      // 当前写入缓冲下标
 
   bool lib_initialized_ = false;
   bool device_opened_ = false;

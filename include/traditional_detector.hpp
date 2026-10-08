@@ -33,6 +33,11 @@ private:
   int value_low_, value_high_;            // 明度上下限
   int morph_kernel_size_;                 // 形态学核大小
 
+  // [优化] 预处理复用缓冲区，避免每帧堆分配（识别逻辑不变）
+  cv::Mat hsv_img_;         // BGR->HSV 中间图
+  cv::Mat mask1_, mask2_;   // 红色两段阈值中间结果
+  cv::Mat mask_;            // 最终二值图
+
   // ---- 灯条筛选阈值 ----
   double max_angle_error_;                         // 灯条偏离竖直方向的最大角度（rad）
   double min_lightbar_ratio_, max_lightbar_ratio_;  // 灯条长宽比范围
@@ -45,8 +50,8 @@ private:
 
   bool debug_;  // 是否显示中间二值图
 
-  // 预处理 + HSV 阈值分割 + 形态学，输出二值图
-  cv::Mat preprocess(const cv::Mat & bgr_img) const;
+  // 预处理 + HSV 阈值分割 + 形态学，输出二值图（复用成员缓冲，避免每帧分配）
+  cv::Mat preprocess(const cv::Mat & bgr_img);
 
   // 从二值图提取并筛选灯条
   std::vector<Lightbar> extract_lightbars(const cv::Mat & binary_img);

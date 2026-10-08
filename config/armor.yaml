@@ -7,6 +7,11 @@ enemy_color: "red"
 # 相机序列号；留空 "" 则自动枚举选择第一台相机
 serial: ""
 
+# [优化] 固定曝光时间(us)与增益(dB)。灯条高亮，短曝光即可；
+# 长曝光会锁死相机出帧率，需按现场光照标定这两项。
+exposure_time: 2000
+gain: 0.0
+
 #####----- HSV 颜色阈值 -----#####
 # 红色在色相环上跨越 0°/180° 两端，用两段区间取并集
 red_hue_low: [0, 160]
@@ -35,3 +40,6 @@ max_side_ratio: 1.5      # 左右灯条最大长度比
 max_rectangular_error: 25  # degree，灯条与连线垂直误差
 
 debug: true
+
+# 是否在控制台打印 FPS（调试时 true，正式运行 false，避免日志刷屏拖慢性能）
+print_fps: true

@@ -102,49 +102,50 @@ std::vector<Armor> TraditionalDetector::detect(const cv::Mat & bgr_img)
   return result;
 }
 
-cv::Mat TraditionalDetector::preprocess(const cv::Mat & bgr_img) const
+cv::Mat TraditionalDetector::preprocess(const cv::Mat & bgr_img)
 {
+  // [优化] 所有中间图复用成员缓冲区，避免每帧堆分配；识别逻辑保持不变
   // 1. BGR 转 HSV
-  cv::Mat hsv_img;
-  cv::cvtColor(bgr_img, hsv_img, cv::COLOR_BGR2HSV);
+  cv::cvtColor(bgr_img, hsv_img_, cv::COLOR_BGR2HSV);
 
   // 2. 颜色阈值分割：只保留敌方颜色
-  cv::Mat mask;
   if (enemy_color_ == Color::red) {
     // 红色跨越色相环 0°/180° 两端，用两段区间取并集
-    cv::Mat mask1, mask2;
     cv::inRange(
-      hsv_img, cv::Scalar(red_hue_low_[0], saturation_low_, value_low_),
-      cv::Scalar(red_hue_high_[0], saturation_high_, value_high_), mask1);
+      hsv_img_, cv::Scalar(red_hue_low_[0], saturation_low_, value_low_),
+      cv::Scalar(red_hue_high_[0], saturation_high_, value_high_), mask1_);
     cv::inRange(
-      hsv_img, cv::Scalar(red_hue_low_[1], saturation_low_, value_low_),
-      cv::Scalar(red_hue_high_[1], saturation_high_, value_high_), mask2);
-    cv::bitwise_or(mask1, mask2, mask);
+      hsv_img_, cv::Scalar(red_hue_low_[1], saturation_low_, value_low_),
+      cv::Scalar(red_hue_high_[1], saturation_high_, value_high_), mask2_);
+    cv::bitwise_or(mask1_, mask2_, mask_);
   } else {
     // 蓝色只用一段区间
     cv::inRange(
-      hsv_img, cv::Scalar(blue_hue_low_, saturation_low_, value_low_),
-      cv::Scalar(blue_hue_high_, saturation_high_, value_high_), mask);
+      hsv_img_, cv::Scalar(blue_hue_low_, saturation_low_, value_low_),
+      cv::Scalar(blue_hue_high_, saturation_high_, value_high_), mask_);
   }
 
   // 3. 形态学闭运算：先膨胀再腐蚀，填补灯条内部空洞、连接细小断裂
   auto kernel =
     cv::getStructuringElement(cv::MORPH_RECT, cv::Size(morph_kernel_size_, morph_kernel_size_));
-  cv::dilate(mask, mask, kernel);
-  cv::erode(mask, mask, kernel);
+  cv::dilate(mask_, mask_, kernel);
+  cv::erode(mask_, mask_, kernel);
 
-  return mask;
+  return mask_;
 }
 
 std::vector<Lightbar> TraditionalDetector::extract_lightbars(const cv::Mat & binary_img)
 {
   // 提取外轮廓（只取最外层，灯条是实心亮块）
   std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(binary_img, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
+  // [优化] CHAIN_APPROX_SIMPLE 只保留折线端点、丢弃共线中间点，点数大幅减少，
+  //         minAreaRect 拟合结果不变，识别效果不变
+  cv::findContours(binary_img, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
   // 每个轮廓求最小外接旋转矩形，并按几何条件筛选灯条
   std::size_t lightbar_id = 0;
   std::vector<Lightbar> lightbars;
+  lightbars.reserve(contours.size());  // [优化] 预分配容量，避免反复扩容
   for (const auto & contour : contours) {
     auto rotated_rect = cv::minAreaRect(contour);
     auto lightbar = Lightbar(rotated_rect, lightbar_id);
